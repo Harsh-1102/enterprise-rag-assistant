@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 
 try:
-    import faiss
+    import faiss  # type: ignore[import-untyped]
 except ImportError:
     faiss = None
 
@@ -25,10 +25,13 @@ from src.embeddings import EmbeddingManager
 
 @dataclass
 class SearchResult:
-    """Represents a retrieved document chunk with similarity score and metadata."""
+    """
+    Represents a retrieved document chunk with similarity score and metadata.
+    Score represents cosine similarity in range [-1, 1], typically [0, 1].
+    """
     chunk_id: str
     text: str
-    score: float  # Cosine similarity score (higher is more similar, range [-1, 1], typically [0, 1])
+    score: float
     metadata: Dict[str, Any]
 
     @property
@@ -50,11 +53,15 @@ class FAISSRetriever:
     Maintains parallel metadata store and handles index persistence.
     """
 
-    def __init__(self, embedding_manager: EmbeddingManager, index_dir: str = "vectorstore"):
+    def __init__(
+        self,
+        embedding_manager: EmbeddingManager,
+        index_dir: str = "vectorstore"
+    ):
         self.embedding_manager = embedding_manager
         self.index_dir = index_dir
         self.index: Optional[Any] = None
-        self.chunks_data: List[Dict[str, Any]] = []  # Parallel list of chunk texts & metadata
+        self.chunks_data: List[Dict[str, Any]] = []
 
         os.makedirs(self.index_dir, exist_ok=True)
 
@@ -63,20 +70,24 @@ class FAISSRetriever:
         return self.index.ntotal if self.index is not None else 0
 
     def is_indexed(self) -> bool:
-        """Checks if a valid index is currently loaded in memory or on disk."""
+        """Checks if a valid index is loaded in memory or exists on disk."""
         if self.index is not None and self.total_vectors > 0:
             return True
         index_file = os.path.join(self.index_dir, "index.faiss")
         meta_file = os.path.join(self.index_dir, "metadata.pkl")
         return os.path.isfile(index_file) and os.path.isfile(meta_file)
 
-    def build_index(self, chunks: List[Chunk], force_rebuild: bool = False) -> int:
+    def build_index(
+        self, chunks: List[Chunk], force_rebuild: bool = False
+    ) -> int:
         """
         Builds a new FAISS index from a list of Chunks.
         Overwrites existing index if force_rebuild=True.
         """
         if faiss is None:
-            raise ImportError("faiss-cpu is required. Please install faiss-cpu.")
+            raise ImportError(
+                "faiss-cpu is required. Please install faiss-cpu."
+            )
 
         if not chunks:
             return 0
@@ -176,7 +187,7 @@ class FAISSRetriever:
         if self.index is None or self.total_vectors == 0:
             # Attempt loading from disk
             loaded = self.load()
-            if not loaded:
+            if not loaded or self.index is None:
                 return []
 
         # Embed query with the same model
@@ -195,8 +206,9 @@ class FAISSRetriever:
             float_score = float(score)
 
             # Apply similarity threshold if set
-            if similarity_threshold is not None and float_score < similarity_threshold:
-                continue
+            if similarity_threshold is not None:
+                if float_score < similarity_threshold:
+                    continue
 
             chunk_info = self.chunks_data[idx]
             result = SearchResult(

@@ -14,15 +14,19 @@ import io
 import os
 import re
 from dataclasses import dataclass, field
-from typing import BinaryIO, Dict, List, Optional, Union
+from typing import Any, BinaryIO, Dict, List, Optional, Union
 
+pypdf: Any = None
 try:
-    import pypdf
+    import pypdf as _pypdf
+    pypdf = _pypdf
 except ImportError:
     pypdf = None
 
+docx: Any = None
 try:
-    import docx
+    import docx as _docx
+    docx = _docx
 except ImportError:
     docx = None
 
@@ -31,7 +35,7 @@ except ImportError:
 class Document:
     """Represents an extracted unit of text from an enterprise document."""
     content: str
-    metadata: Dict[str, Union[str, int, float]] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def filename(self) -> str:
@@ -51,7 +55,10 @@ class Document:
 
 
 class DocumentLoader:
-    """Enterprise document loader with cleaning, page tracking, and metadata tagging."""
+    """
+    Enterprise document loader with cleaning, page tracking,
+    and metadata tagging.
+    """
 
     def __init__(self):
         pass
@@ -73,13 +80,11 @@ class DocumentLoader:
         if not raw_text:
             return ""
 
-        # Remove null characters and non-printable control characters
         cleaned = raw_text.replace("\x00", " ")
         cleaned = re.sub(r"[\r\t]+", " ", cleaned)
 
-        # Normalize consecutive spaces to single space, but preserve double newlines
+        # Normalize consecutive spaces, preserve double newlines
         lines = [line.strip() for line in cleaned.split("\n")]
-        # Group lines with content
         cleaned_lines = []
         for line in lines:
             line_clean = re.sub(r" {2,}", " ", line)
@@ -97,10 +102,13 @@ class DocumentLoader:
     ) -> List[Document]:
         """
         Extracts text from a PDF file preserving per-page metadata.
-        Accepts file paths or in-memory byte streams (e.g. Streamlit UploadedFile).
+        Accepts file paths or in-memory byte streams.
         """
         if pypdf is None:
-            raise ImportError("pypdf is required to process PDF files. Please install pypdf.")
+            raise ImportError(
+                "pypdf is required to process PDF files. "
+                "Please install pypdf."
+            )
 
         docs: List[Document] = []
         try:
@@ -131,7 +139,10 @@ class DocumentLoader:
                     continue
 
                 # Basic heuristic to detect section header in the page
-                first_lines = [l for l in cleaned.split("\n") if l.strip()]
+                first_lines = [
+                    line_text for line_text in cleaned.split("\n")
+                    if line_text.strip()
+                ]
                 section = first_lines[0][:60] if first_lines else "General"
 
                 metadata = {
@@ -146,7 +157,9 @@ class DocumentLoader:
                 docs.append(Document(content=cleaned, metadata=metadata))
 
         except Exception as e:
-            raise RuntimeError(f"Error extracting PDF '{filename}': {str(e)}") from e
+            raise RuntimeError(
+                f"Error extracting PDF '{filename}': {str(e)}"
+            ) from e
 
         return docs
 
@@ -156,10 +169,13 @@ class DocumentLoader:
         filename: str = "document.docx"
     ) -> List[Document]:
         """
-        Extracts text from a DOCX file preserving section headings and metadata.
+        Extracts text from a DOCX file preserving section headings
+        and metadata.
         """
         if docx is None:
-            raise ImportError("python-docx is required to process DOCX files. Please install python-docx.")
+            raise ImportError(
+                "python-docx is required. Please install python-docx."
+            )
 
         docs: List[Document] = []
         try:
@@ -171,12 +187,11 @@ class DocumentLoader:
             else:
                 doc_obj = docx.Document(source)
 
-            # Accumulate paragraphs, grouping by Headings
             current_section = "Introduction"
             paragraphs: List[str] = []
             page_estimate = 1
             char_accumulator = 0
-            WORDS_PER_PAGE_ESTIMATE = 450
+            WORDS_PER_PAGE = 450
 
             all_text_for_id = " ".join(p.text for p in doc_obj.paragraphs[:10])
             doc_id = self._generate_doc_id(filename, all_text_for_id)
@@ -186,11 +201,12 @@ class DocumentLoader:
                 if not p_text:
                     continue
 
-                # Check if paragraph style is a Heading
                 style_name = para.style.name if para.style else ""
-                if "Heading" in style_name or (len(p_text) < 60 and p_text.isupper()):
+                is_heading = "Heading" in style_name or (
+                    len(p_text) < 60 and p_text.isupper()
+                )
+                if is_heading:
                     if paragraphs:
-                        # Flush current section as a document unit
                         combined = "\n\n".join(paragraphs)
                         metadata = {
                             "filename": filename,
@@ -200,13 +216,15 @@ class DocumentLoader:
                             "doc_id": doc_id,
                             "char_count": len(combined),
                         }
-                        docs.append(Document(content=combined, metadata=metadata))
+                        docs.append(
+                            Document(content=combined, metadata=metadata)
+                        )
                         paragraphs = []
                     current_section = p_text
 
                 paragraphs.append(p_text)
                 char_accumulator += len(p_text)
-                if char_accumulator > (WORDS_PER_PAGE_ESTIMATE * 5):
+                if char_accumulator > (WORDS_PER_PAGE * 5):
                     page_estimate += 1
                     char_accumulator = 0
 
@@ -224,7 +242,9 @@ class DocumentLoader:
                 docs.append(Document(content=combined, metadata=metadata))
 
         except Exception as e:
-            raise RuntimeError(f"Error extracting DOCX '{filename}': {str(e)}") from e
+            raise RuntimeError(
+                f"Error extracting DOCX '{filename}': {str(e)}"
+            ) from e
 
         return docs
 
@@ -234,7 +254,13 @@ class DocumentLoader:
         filename: Optional[str] = None
     ) -> List[Document]:
         """Loads a document detecting format by extension."""
-        fname = filename or (os.path.basename(source) if isinstance(source, (str, os.PathLike)) else "unknown")
+        if filename:
+            fname = filename
+        elif isinstance(source, (str, os.PathLike)):
+            fname = os.path.basename(source)
+        else:
+            fname = "unknown"
+
         ext = os.path.splitext(fname)[1].lower()
 
         if ext == ".pdf":
@@ -242,10 +268,11 @@ class DocumentLoader:
         elif ext in [".docx", ".doc"]:
             return self.load_docx(source, filename=fname)
         else:
-            # Fallback for text files or unsupported formats
             try:
                 if isinstance(source, (str, os.PathLike)):
-                    with open(source, "r", encoding="utf-8", errors="ignore") as f:
+                    with open(
+                        source, "r", encoding="utf-8", errors="ignore"
+                    ) as f:
                         raw = f.read()
                 elif isinstance(source, bytes):
                     raw = source.decode("utf-8", errors="ignore")
@@ -270,7 +297,11 @@ class DocumentLoader:
                     )
                 ]
             except Exception as e:
-                raise ValueError(f"Unsupported or unreadable file format '{fname}': {str(e)}")
+                err_msg = (
+                    f"Unsupported or unreadable file format "
+                    f"'{fname}': {str(e)}"
+                )
+                raise ValueError(err_msg)
 
     def load_directory(self, dir_path: str) -> List[Document]:
         """Loads all PDF and DOCX documents in a directory."""

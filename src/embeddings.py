@@ -1,8 +1,9 @@
 """
 embeddings.py - Dense Vector Embedding Pipeline
 
-Uses Sentence-Transformers to generate normalized 384-dimensional dense embeddings.
-Guarantees identical embedding model for both document indexing and query retrieval.
+Uses Sentence-Transformers to generate normalized 384-dimensional dense
+embeddings. Guarantees identical embedding model for both document indexing
+and query retrieval.
 """
 
 from typing import List, Optional
@@ -11,11 +12,15 @@ import numpy as np
 
 class EmbeddingManager:
     """
-    Manages embedding model lifecycle, batch inference, and vector normalization.
+    Manages embedding model lifecycle, batch inference, and normalization.
     Uses 'all-MiniLM-L6-v2' by default (fast, high-accuracy, 384 dimensions).
     """
 
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2", device: Optional[str] = None):
+    def __init__(
+        self,
+        model_name: str = "all-MiniLM-L6-v2",
+        device: Optional[str] = None
+    ):
         self.model_name = model_name
         self.device = device
         self._model = None
@@ -27,12 +32,17 @@ class EmbeddingManager:
         if self._model is None:
             try:
                 from sentence_transformers import SentenceTransformer
-                self._model = SentenceTransformer(self.model_name, device=self.device)
-                self._embedding_dim = self._model.get_sentence_embedding_dimension()
+                self._model = SentenceTransformer(
+                    self.model_name, device=self.device
+                )
+                self._embedding_dim = (
+                    self._model.get_sentence_embedding_dimension()
+                )
             except Exception as e:
                 raise RuntimeError(
                     f"Failed to load embedding model '{self.model_name}'. "
-                    f"Ensure 'sentence-transformers' is installed. Error: {str(e)}"
+                    f"Ensure 'sentence-transformers' is installed. "
+                    f"Error: {str(e)}"
                 ) from e
         return self._model
 
@@ -41,7 +51,12 @@ class EmbeddingManager:
         """Returns the embedding vector dimensionality."""
         return self._embedding_dim
 
-    def embed_texts(self, texts: List[str], batch_size: int = 32, normalize: bool = True) -> np.ndarray:
+    def embed_texts(
+        self,
+        texts: List[str],
+        batch_size: int = 32,
+        normalize: bool = True
+    ) -> np.ndarray:
         """
         Embeds a list of text strings into a 2D numpy array of shape (N, D).
         When normalize=True, vectors are unit-normalized (L2 norm = 1.0),
