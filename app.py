@@ -19,6 +19,14 @@ from src.embeddings import EmbeddingManager
 from src.retriever import FAISSRetriever
 from src.rag_pipeline import RAGPipeline, INSUFFICIENT_INFO_RESPONSE
 from src.evaluation import RAGEvaluator, HR_BENCHMARK_DATASET
+from src.source_viewer import (
+    render_source_cards,
+    save_uploaded_document,
+    trigger_source_viewer,
+    render_fallback_inline_viewer,
+    resolve_source,
+)
+
 
 # ==============================================================================
 # Page Configuration & Styling
@@ -260,6 +268,8 @@ with st.sidebar:
             for ufile in uploaded_files:
                 try:
                     file_bytes = ufile.read()
+                    # Safely persist to session cache & disk registry for global document viewing
+                    save_uploaded_document(file_bytes, filename=ufile.name)
                     docs = pipeline.loader.load_document(file_bytes, filename=ufile.name)
                     all_docs.extend(docs)
                 except Exception as e:
@@ -365,48 +375,70 @@ tab_chat, tab_eval, tab_arch = st.tabs(["💬 Query Assistant", "📈 Evaluation
 # TAB 1: Conversational RAG Query Assistant
 # ==============================================================================
 with tab_chat:
-    # Quick Test Question Chips
-    st.markdown("**💡 Quick Test Questions:**")
-    qc1, qc2, qc3, qc4, qc5 = st.columns(5)
+    # Quick Test Question Chips covering all bundled documents
+    st.markdown("**💡 Quick Test Questions (Click to test different documents):**")
+    qc1, qc2, qc3, qc4 = st.columns(4)
+    qc5, qc6, qc7, qc8 = st.columns(4)
     sample_question = None
 
-    if qc1.button("🌴 Leave Entitlement", use_container_width=True):
+    if qc1.button("🌴 Annual Leave (PDF P.1)", use_container_width=True):
         sample_question = "What is the annual paid leave entitlement for full-time employees?"
-    if qc2.button("🤒 Sick Leave Rule", use_container_width=True):
-        sample_question = "How many days of sick leave can I take without a doctor note?"
-    if qc3.button("🏠 WFH Core Hours", use_container_width=True):
-        sample_question = "What are the core working hours under the Work From Home policy?"
-    if qc4.button("🚪 Resignation Notice", use_container_width=True):
-        sample_question = "What is the resignation notice period for permanent staff?"
-    if qc5.button("🚫 Out-of-Domain Test", use_container_width=True):
-        sample_question = "What is the capital of France and what is its population?"
+    if qc2.button("🤒 Sick Leave (PDF P.2)", use_container_width=True):
+        sample_question = "How many days of sick leave can an employee take without a doctor note?"
+    if qc3.button("📘 Handbook (PDF)", use_container_width=True):
+        sample_question = "What is the probation period length and standard working hours in the Employee Handbook?"
+    if qc4.button("🏠 WFH Policy (PDF)", use_container_width=True):
+        sample_question = "What are the core working hours and internet stipend under the Work From Home policy?"
+
+    if qc5.button("🏥 Benefits (PDF)", use_container_width=True):
+        sample_question = "What health and wellness insurance coverage is provided to employees and dependents?"
+    if qc6.button("⏱️ Attendance (DOCX)", use_container_width=True):
+        sample_question = "What are the attendance tracking rules and grace periods under the Attendance Policy?"
+    if qc7.button("⚖️ Code of Conduct (PDF/DOCX)", use_container_width=True):
+        sample_question = "What is the company policy regarding workplace harassment and reporting misconduct?"
+    if qc8.button("🚪 Resignation (PDF)", use_container_width=True):
+        sample_question = "What is the resignation notice period for permanent employees?"
 
     st.markdown("---")
 
+    # Inline viewer if active source is selected
+    render_fallback_inline_viewer()
+
     # Render Conversation History
-    for msg in st.session_state.messages:
+    for m_idx, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"], avatar="🧑‍💼" if msg["role"] == "user" else "🤖"):
             st.markdown(msg["content"])
 
-            # Render Sources and Chunks if present
+            # Render Sources with Reusable Interactive Cards
             if msg.get("sources"):
-                st.markdown("**📚 Verified Sources:**")
-                source_html = " ".join([
-                    f"<span class='source-tag'>📄 {s['filename']} (Page {s['page_number']}) — Cosine: {s['score']:.2f}</span>"
-                    for s in msg["sources"]
-                ])
-                st.markdown(source_html, unsafe_allow_html=True)
+                render_source_cards(msg["sources"], key_prefix=f"hist_{m_idx}")
 
             if msg.get("retrieved_chunks"):
                 with st.expander("🔍 Inspect Retrieved Context Chunks (Top-K)"):
                     for idx, ch in enumerate(msg["retrieved_chunks"], 1):
-                        st.markdown(f"""
-                        <div class="chunk-box">
-                            <b>Chunk #{idx}</b> | <code>{ch.filename}</code> (Page {ch.page_number}, Section: {ch.section}) | <b>Score: {ch.score:.3f}</b>
-                            <br><br>
-                            {ch.text}
-                        </div>
-                        """, unsafe_allow_html=True)
+                        c_box, c_act = st.columns([4, 1])
+                        with c_box:
+                            st.markdown(f"""
+                            <div class="chunk-box">
+                                <b>Chunk #{idx}</b> | <code>{ch.filename}</code> (Page {ch.page_number}, Section: {ch.section}) | <b>Score: {ch.score:.3f}</b>
+                                <br><br>
+                                {ch.text}
+                            </div>
+                            """, unsafe_allow_html=True)
+                        with c_act:
+                            is_pdf = ch.filename.lower().endswith(".pdf")
+                            btn_lbl = f"🔎 Page {ch.page_number}" if is_pdf else "📑 Preview"
+                            ch_dict = {
+                                "filename": ch.filename,
+                                "file_type": "pdf" if is_pdf else "docx",
+                                "page_number": ch.page_number,
+                                "section": ch.section,
+                                "score": ch.score,
+                                "chunk_id": ch.chunk_id,
+                                "text": ch.text,
+                            }
+                            if st.button(btn_lbl, key=f"hist_chk_{m_idx}_{idx}_{ch.chunk_id}", use_container_width=True):
+                                trigger_source_viewer(ch_dict)
 
     # Chat Input Box
     user_input = st.chat_input("Ask any question about company HR policies, benefits, attendance, or handbook...")
@@ -445,26 +477,37 @@ with tab_chat:
 
                 st.markdown(rag_res.answer)
 
-                # Sources Display
+                # Sources Display with Interactive Cards
                 if rag_res.sources:
-                    st.markdown("**📚 Verified Sources:**")
-                    source_html = " ".join([
-                        f"<span class='source-tag'>📄 {s['filename']} (Page {s['page_number']}) — Cosine: {s['score']:.2f}</span>"
-                        for s in rag_res.sources
-                    ])
-                    st.markdown(source_html, unsafe_allow_html=True)
+                    render_source_cards(rag_res.sources, key_prefix=f"act_{int(time.time()*1000)}")
 
                 # Retrieved context expander
                 if rag_res.retrieved_chunks:
                     with st.expander("🔍 Inspect Retrieved Context Chunks (Top-K)"):
                         for idx, ch in enumerate(rag_res.retrieved_chunks, 1):
-                            st.markdown(f"""
-                            <div class="chunk-box">
-                                <b>Chunk #{idx}</b> | <code>{ch.filename}</code> (Page {ch.page_number}, Section: {ch.section}) | <b>Score: {ch.score:.3f}</b>
-                                <br><br>
-                                {ch.text}
-                            </div>
-                            """, unsafe_allow_html=True)
+                            c_box, c_act = st.columns([4, 1])
+                            with c_box:
+                                st.markdown(f"""
+                                <div class="chunk-box">
+                                    <b>Chunk #{idx}</b> | <code>{ch.filename}</code> (Page {ch.page_number}, Section: {ch.section}) | <b>Score: {ch.score:.3f}</b>
+                                    <br><br>
+                                    {ch.text}
+                                </div>
+                                """, unsafe_allow_html=True)
+                            with c_act:
+                                is_pdf = ch.filename.lower().endswith(".pdf")
+                                btn_lbl = f"🔎 Page {ch.page_number}" if is_pdf else "📑 Preview"
+                                ch_dict = {
+                                    "filename": ch.filename,
+                                    "file_type": "pdf" if is_pdf else "docx",
+                                    "page_number": ch.page_number,
+                                    "section": ch.section,
+                                    "score": ch.score,
+                                    "chunk_id": ch.chunk_id,
+                                    "text": ch.text,
+                                }
+                                if st.button(btn_lbl, key=f"act_chk_{idx}_{ch.chunk_id}", use_container_width=True):
+                                    trigger_source_viewer(ch_dict)
 
                 # Record in session state
                 st.session_state.messages.append({
@@ -490,6 +533,11 @@ with tab_eval:
     - **Hallucination Rate**: Detects if fabricated facts or unsupported answers were produced (especially on out-of-domain queries).
     """)
 
+    if "eval_df" not in st.session_state:
+        st.session_state.eval_df = None
+    if "eval_metrics" not in st.session_state:
+        st.session_state.eval_metrics = None
+
     if st.button("🚀 Run Complete Benchmark (9 Gold-Standard Questions)", type="primary"):
         if pipeline.retriever.total_vectors == 0:
             st.error("Please load or index documents first before running evaluation.")
@@ -497,30 +545,63 @@ with tab_eval:
             with st.spinner("Executing benchmark across in-domain and out-of-domain questions..."):
                 evaluator = RAGEvaluator(pipeline)
                 df_results, summary_metrics = evaluator.run_benchmark(HR_BENCHMARK_DATASET, top_k=top_k)
+                st.session_state.eval_df = df_results
+                st.session_state.eval_metrics = summary_metrics
 
             st.success("Evaluation complete!")
 
-            # Summary Metric Cards
-            sm1, sm2, sm3, sm4 = st.columns(4)
-            sm1.metric("Hit@K Retrieval Rate", f"{summary_metrics['Retrieval Hit Rate (Hit@K)']}%")
-            sm2.metric("Groundedness Score", f"{summary_metrics['Average Groundedness Score']}%")
-            sm3.metric("Answer F1 Score", f"{summary_metrics['Average Answer F1']}%")
-            sm4.metric("Hallucination Rate", f"{summary_metrics['Hallucination Rate']}%", delta="Target: 0%", delta_color="inverse")
+    if st.session_state.eval_df is not None and st.session_state.eval_metrics is not None:
+        summary_metrics = st.session_state.eval_metrics
+        df_results = st.session_state.eval_df
 
-            st.markdown("### 📋 Detailed Benchmark Results Table")
-            display_cols = [
-                "id", "question", "category", "expected_source",
-                "retrieval_hit", "confidence_score", "groundedness", "answer_f1", "hallucination"
-            ]
-            st.dataframe(df_results[display_cols], use_container_width=True)
+        # Summary Metric Cards
+        sm1, sm2, sm3, sm4 = st.columns(4)
+        sm1.metric("Hit@K Retrieval Rate", f"{summary_metrics['Retrieval Hit Rate (Hit@K)']}%")
+        sm2.metric("Groundedness Score", f"{summary_metrics['Average Groundedness Score']}%")
+        sm3.metric("Answer F1 Score", f"{summary_metrics['Average Answer F1']}%")
+        sm4.metric("Hallucination Rate", f"{summary_metrics['Hallucination Rate']}%", delta="Target: 0%", delta_color="inverse")
 
-            csv_data = df_results.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                "📥 Export Evaluation Results (CSV)",
-                data=csv_data,
-                file_name="rag_evaluation_results.csv",
-                mime="text/csv",
-            )
+        st.markdown("### 📋 Detailed Benchmark Results Table")
+        display_cols = [
+            "id", "question", "category", "expected_source",
+            "retrieval_hit", "confidence_score", "groundedness", "answer_f1", "hallucination"
+        ]
+        st.dataframe(df_results[display_cols], use_container_width=True)
+
+        csv_data = df_results.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            "📥 Export Evaluation Results (CSV)",
+            data=csv_data,
+            file_name="rag_evaluation_results.csv",
+            mime="text/csv",
+        )
+
+        st.markdown("---")
+        st.markdown("### 🔍 Clickable Benchmark Source Inspector")
+        st.markdown("Click on any benchmark test case below to inspect its gold-standard source document:")
+        
+        # Display clickable source inspection cards for evaluation rows
+        for _, row in df_results.iterrows():
+            exp_src = row.get("expected_source")
+            if exp_src and exp_src != "NONE":
+                col_info, col_btn = st.columns([4, 1])
+                with col_info:
+                    hit_icon = "✅" if row.get("retrieval_hit") else "❌"
+                    st.markdown(f"**[{row['id']}] {hit_icon} {row['question']}** → *Expected:* `{exp_src}`")
+                with col_btn:
+                    is_pdf = exp_src.lower().endswith(".pdf")
+                    btn_text = f"📄 View PDF" if is_pdf else "📑 View DOCX"
+                    src_dict = {
+                        "filename": exp_src,
+                        "file_type": "pdf" if is_pdf else "docx",
+                        "page_number": 1,
+                        "section": "General",
+                        "score": float(row.get("confidence_score", 1.0)),
+                        "text": str(row.get("generated_answer", "")),
+                    }
+                    if st.button(btn_text, key=f"eval_src_{row['id']}_{exp_src}", use_container_width=True):
+                        trigger_source_viewer(src_dict)
+
 
 
 # ==============================================================================

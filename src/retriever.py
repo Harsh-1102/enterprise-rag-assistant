@@ -39,12 +39,25 @@ class SearchResult:
         return str(self.metadata.get("filename", "Unknown"))
 
     @property
+    def file_type(self) -> str:
+        fname = self.filename.lower()
+        if fname.endswith(".pdf"):
+            return "pdf"
+        elif fname.endswith(".docx") or fname.endswith(".doc"):
+            return "docx"
+        return str(self.metadata.get("file_type", "text"))
+
+    @property
     def page_number(self) -> int:
         return int(self.metadata.get("page_number", 1))
 
     @property
     def section(self) -> str:
         return str(self.metadata.get("section", "General"))
+
+    @property
+    def doc_id(self) -> str:
+        return str(self.metadata.get("doc_id", "doc"))
 
 
 class FAISSRetriever:

@@ -61,11 +61,11 @@ class GeminiLLMClient:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model_name: str = "gemini-2.5-flash"
+        model_name: str = "gemini-3.6-flash"
     ):
         self.api_key = api_key or os.getenv("GEMINI_API_KEY", "").strip()
         self.model_name = (
-            model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+            model_name or os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
         )
         self._is_available: bool = False
         self._client: Optional[Any] = None
@@ -105,7 +105,7 @@ class GeminiLLMClient:
         return self._is_available
 
     def generate(self, prompt: str) -> str:
-        """Invokes the Gemini LLM with error handling and fallback."""
+        """Invokes the Gemini LLM with auto-model fallback and error handling."""
         if not self._is_available or self._client is None:
             context_part = ""
             if "--- RETRIEVED ENTERPRISE CONTEXT ---" in prompt:
@@ -124,32 +124,49 @@ class GeminiLLMClient:
                 "file.)*"
             )
 
-        try:
-            # Modern Google GenAI SDK (google-genai)
-            if hasattr(self._client, "models") and hasattr(
-                self._client.models, "generate_content"
-            ):
-                from google.genai import types
-                response = self._client.models.generate_content(
-                    model=self.model_name,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        temperature=0.1,
-                        top_p=0.9,
-                        max_output_tokens=1024,
-                    ),
-                )
-                if response and response.text:
-                    return response.text.strip()
-            # Fallback legacy GenerativeModel
-            elif hasattr(self._client, "generate_content"):
-                response = self._client.generate_content(prompt)
-                if response and response.text:
-                    return response.text.strip()
+        # Candidate models list with fallback in case of regional or account deprecation
+        candidate_models = [self.model_name]
+        for fallback_model in ["gemini-3.6-flash", "gemini-2.5-flash"]:
+            if fallback_model not in candidate_models:
+                candidate_models.append(fallback_model)
 
-            return INSUFFICIENT_INFO_RESPONSE
-        except Exception as e:
-            return f"Error communicating with Gemini API: {str(e)}"
+        last_error = ""
+        for model_to_try in candidate_models:
+            try:
+                # Modern Google GenAI SDK (google-genai)
+                if hasattr(self._client, "models") and hasattr(
+                    self._client.models, "generate_content"
+                ):
+                    from google.genai import types
+                    response = self._client.models.generate_content(
+                        model=model_to_try,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            temperature=0.1,
+                            top_p=0.9,
+                            max_output_tokens=1024,
+                        ),
+                    )
+                    if response and response.text:
+                        self.model_name = model_to_try
+                        return response.text.strip()
+                # Fallback legacy GenerativeModel
+                elif hasattr(self._client, "generate_content"):
+                    response = self._client.generate_content(prompt)
+                    if response and response.text:
+                        return response.text.strip()
+
+            except Exception as e:
+                last_error = str(e)
+                # If 404 / model not found, loop to next candidate model
+                if "404" in last_error or "NOT_FOUND" in last_error or "not found" in last_error.lower():
+                    continue
+                else:
+                    return f"Error communicating with Gemini API: {last_error}"
+
+        if last_error:
+            return f"Error communicating with Gemini API: {last_error}"
+        return INSUFFICIENT_INFO_RESPONSE
 
 
 class RAGPipeline:
@@ -368,15 +385,18 @@ class RAGPipeline:
         sources: List[Dict[str, Any]] = []
         seen_sources = set()
         for chunk in retrieved_chunks:
-            source_key = (chunk.filename, chunk.page_number)
+            source_key = (chunk.filename, chunk.page_number, chunk.section)
             if source_key not in seen_sources:
                 seen_sources.add(source_key)
                 sources.append({
                     "filename": chunk.filename,
+                    "file_type": chunk.file_type,
                     "page_number": chunk.page_number,
                     "section": chunk.section,
                     "score": chunk.score,
                     "chunk_id": chunk.chunk_id,
+                    "doc_id": chunk.doc_id,
+                    "text": chunk.text,
                 })
 
         # Step 5: Prompt Construction & LLM Generation

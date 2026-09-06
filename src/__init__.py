@@ -9,6 +9,13 @@ from src.embeddings import EmbeddingManager
 from src.retriever import FAISSRetriever, SearchResult
 from src.rag_pipeline import RAGPipeline
 from src.evaluation import RAGEvaluator
+from src.source_viewer import (
+    resolve_source,
+    render_source_cards,
+    render_pdf_viewer,
+    render_docx_preview,
+    save_uploaded_document,
+)
 
 __all__ = [
     "Document",
@@ -20,4 +27,9 @@ __all__ = [
     "SearchResult",
     "RAGPipeline",
     "RAGEvaluator",
+    "resolve_source",
+    "render_source_cards",
+    "render_pdf_viewer",
+    "render_docx_preview",
+    "save_uploaded_document",
 ]

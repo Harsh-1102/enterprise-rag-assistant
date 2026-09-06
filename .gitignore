@@ -220,11 +220,13 @@ __marimo__/
 # Python
 __pycache__/
 *.py[cod]
+*.pyc
 *$py.class
 *.so
 .Python
 env/
 venv/
+.venv/
 ENV/
 env.bak/
 venv.bak/
@@ -235,6 +237,7 @@ venv.bak/
 *.key
 *.pem
 *.token
+!.env.example
 
 # Vector store index files (reproducible from data)
 vectorstore/*.faiss
@@ -261,5 +264,7 @@ Thumbs.db
 
 # Processed intermediate data & cache
 data/processed/
+data/documents/uploads/*
+!data/documents/uploads/.gitkeep
 .cache/
 .pytest_cache/
