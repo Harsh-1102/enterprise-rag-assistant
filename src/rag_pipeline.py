@@ -54,40 +54,50 @@ class RAGResponse:
 
 class GeminiLLMClient:
     """
-    Wrapper for Google Gemini API.
+    Wrapper for Google Gemini API using the official Google GenAI SDK.
     Handles authentication, prompting, error handling, and offline fallback.
     """
 
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model_name: str = "gemini-1.5-flash"
+        model_name: str = "gemini-2.5-flash"
     ):
         self.api_key = api_key or os.getenv("GEMINI_API_KEY", "").strip()
         self.model_name = (
-            model_name or os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+            model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
         )
         self._is_available: bool = False
-        self._genai_model: Optional[Any] = None
+        self._client: Optional[Any] = None
         self._init_client()
 
     def _init_client(self):
         if self.api_key and self.api_key != "your_gemini_api_key_here":
             try:
-                import google.generativeai as genai
-                genai.configure(api_key=self.api_key)
-                self._genai_model = genai.GenerativeModel(
-                    model_name=self.model_name,
-                    generation_config={
-                        "temperature": 0.1,
-                        "top_p": 0.9,
-                        "max_output_tokens": 1024,
-                    },
-                )
+                # Modern Google GenAI SDK (google-genai)
+                from google import genai
+                self._client = genai.Client(api_key=self.api_key)
                 self._is_available = True
             except Exception as e:
-                print(f"Warning: Failed to init Google Gemini client: {e}")
-                self._is_available = False
+                # Fallback to legacy google.generativeai if available
+                try:
+                    import google.generativeai as legacy_genai
+                    legacy_genai.configure(api_key=self.api_key)
+                    self._client = legacy_genai.GenerativeModel(
+                        model_name=self.model_name,
+                        generation_config={
+                            "temperature": 0.1,
+                            "top_p": 0.9,
+                            "max_output_tokens": 1024,
+                        },
+                    )
+                    self._is_available = True
+                except Exception as inner_e:
+                    print(
+                        f"Warning: Failed to init Google Gemini client: "
+                        f"{e}; {inner_e}"
+                    )
+                    self._is_available = False
         else:
             self._is_available = False
 
@@ -96,7 +106,7 @@ class GeminiLLMClient:
 
     def generate(self, prompt: str) -> str:
         """Invokes the Gemini LLM with error handling and fallback."""
-        if not self._is_available or self._genai_model is None:
+        if not self._is_available or self._client is None:
             context_part = ""
             if "--- RETRIEVED ENTERPRISE CONTEXT ---" in prompt:
                 after_ctx = prompt.split(
@@ -115,9 +125,28 @@ class GeminiLLMClient:
             )
 
         try:
-            response = self._genai_model.generate_content(prompt)
-            if response and response.text:
-                return response.text.strip()
+            # Modern Google GenAI SDK (google-genai)
+            if hasattr(self._client, "models") and hasattr(
+                self._client.models, "generate_content"
+            ):
+                from google.genai import types
+                response = self._client.models.generate_content(
+                    model=self.model_name,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.1,
+                        top_p=0.9,
+                        max_output_tokens=1024,
+                    ),
+                )
+                if response and response.text:
+                    return response.text.strip()
+            # Fallback legacy GenerativeModel
+            elif hasattr(self._client, "generate_content"):
+                response = self._client.generate_content(prompt)
+                if response and response.text:
+                    return response.text.strip()
+
             return INSUFFICIENT_INFO_RESPONSE
         except Exception as e:
             return f"Error communicating with Gemini API: {str(e)}"

@@ -5,7 +5,7 @@
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.30+-FF4B4B?style=flat&logo=streamlit&logoColor=white)](https://streamlit.io)
 [![FAISS](https://img.shields.io/badge/Vector_DB-FAISS-00599C?style=flat)](https://github.com/facebookresearch/faiss)
 [![Sentence Transformers](https://img.shields.io/badge/Embeddings-all--MiniLM--L6--v2-yellow?style=flat)](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2)
-[![Google Gemini](https://img.shields.io/badge/LLM-Gemini_1.5_Flash-4285F4?style=flat&logo=google&logoColor=white)](https://ai.google.dev/)
+[![Google Gemini](https://img.shields.io/badge/LLM-Gemini_2.5_Flash-4285F4?style=flat&logo=google&logoColor=white)](https://ai.google.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -14,7 +14,7 @@
 
 The **Enterprise Document Intelligence & RAG Assistant** is an end-to-end Generative AI platform engineered to resolve the critical corporate challenge of knowledge fragmentation and policy ambiguity. Utilizing a strictly grounded **Retrieval-Augmented Generation (RAG)** pipeline, the assistant enables employees and HR leaders to upload unstructured business policy documents (PDF, DOCX, TXT), index them into high-dimensional vector representations, and query the knowledge base in natural language.
 
-Crucially, the system does **not** rely on naive LLM prompting. Instead, it couples **Sentence-Transformers** dense embeddings (`all-MiniLM-L6-v2`) with a local **FAISS** vector index, similarity thresholding to eliminate hallucinations, exact source attribution down to document name and page number, and **Google Gemini 1.5 Flash** for grounded factual synthesis.
+Crucially, the system does **not** rely on naive LLM prompting. Instead, it couples **Sentence-Transformers** dense embeddings (`all-MiniLM-L6-v2`) with a local **FAISS** vector index, similarity thresholding to eliminate hallucinations, exact source attribution down to document name and page number, and **Google Gemini 2.5 Flash** for grounded factual synthesis.
 
 ---
 
@@ -146,7 +146,7 @@ The default enterprise deployment is configured for **Human Resources Intelligen
                       │
                       ▼
 ┌────────────────────────────────────────────┐
-│       Google Gemini 1.5 Flash LLM          │
+│       Google Gemini 2.5 Flash LLM          │
 └─────────────────────┬──────────────────────┘
                       │
                       ▼
@@ -165,7 +165,7 @@ The default enterprise deployment is configured for **Human Resources Intelligen
 - **Document Extractors**: `pypdf` (PDF extraction) & `python-docx` (DOCX parsing)
 - **Embedding Model**: `sentence-transformers/all-MiniLM-L6-v2` (384-dimensional dense vectors)
 - **Vector Database**: `faiss-cpu` (Facebook AI Similarity Search, `IndexFlatIP`)
-- **Large Language Model (LLM)**: Google Gemini API (`gemini-1.5-flash`)
+- **Large Language Model (LLM)**: Google Gemini API (`gemini-2.5-flash`)
 - **Document Generator**: `reportlab` (synthetic enterprise PDF generator)
 - **Data Science & Benchmarking**: `pandas`, `numpy`, `tabulate`, `pytest`
 
@@ -462,7 +462,7 @@ Because our pipeline $L_2$-normalizes all vectors to unit length ($\|u\| = 1$), 
 **Answer:** During chunking, each chunk retains its parent `filename` and `page_number`. When Top-$K$ chunks are retrieved, unique source tuples `(filename, page_number)` are extracted and rendered in the UI with their similarity scores.
 
 ### 17. What LLM did you use and why?
-**Answer:** We chose **Google Gemini 1.5 Flash**. It offers a large context window, fast inference latency (< 1 second), strong instruction-following for strict grounding, and generous free tier quotas via Google AI Studio.
+**Answer:** We chose **Google Gemini 2.5 Flash**. It offers a large context window, fast inference latency (< 1 second), strong instruction-following for strict grounding, and generous free tier quotas via Google AI Studio.
 
 ### 18. What is the difference between an LLM and an embedding model?
 **Answer:**

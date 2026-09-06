@@ -567,7 +567,7 @@ with tab_arch:
 [Strict Grounding Prompt + Multi-Turn Memory]
      │
      ▼
-[Google Gemini 1.5 Flash LLM]
+[Google Gemini 2.5 Flash LLM]
      │
      ▼
 [Grounded Answer + Verified Source Attribution (Doc Name + Page)]
