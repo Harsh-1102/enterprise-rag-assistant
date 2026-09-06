@@ -216,3 +216,50 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables and secrets (CRITICAL: NEVER COMMIT KEYS)
+.env
+.env.local
+*.key
+*.pem
+*.token
+
+# Vector store index files (reproducible from data)
+vectorstore/*.faiss
+vectorstore/*.pkl
+
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# Processed intermediate data & cache
+data/processed/
+.cache/
+.pytest_cache/
