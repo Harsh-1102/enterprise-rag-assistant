@@ -120,8 +120,8 @@ class GeminiLLMClient:
                 "context summary:\n\n"
                 f"{context_part[:600]}...\n\n"
                 "*(Note: To generate full conversational answers with Google "
-                "Gemini, set your `GEMINI_API_KEY` in the sidebar or `.env` "
-                "file.)*"
+                "Gemini, configure your `GEMINI_API_KEY` in your local `.env` "
+                "file or Streamlit Community Cloud Secrets.)*"
             )
 
         # Candidate models list with fallback in case of regional or account deprecation
