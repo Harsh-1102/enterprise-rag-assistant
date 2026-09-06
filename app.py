@@ -164,19 +164,45 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+def get_gemini_api_key() -> str:
+    """
+    Safely retrieves the Gemini API key.
+    Priority:
+    1. st.secrets["GEMINI_API_KEY"] if available (Streamlit Community Cloud)
+    2. os.getenv("GEMINI_API_KEY") (Local development via .env)
+    Never exposes, logs, or prints the key.
+    """
+    api_key = ""
+    # Priority 1: Streamlit Community Cloud Secrets
+    try:
+        if "GEMINI_API_KEY" in st.secrets:
+            api_key = str(st.secrets["GEMINI_API_KEY"]).strip()
+    except Exception:
+        pass
+
+    # Priority 2: Local environment (.env via python-dotenv)
+    if not api_key:
+        api_key = os.getenv("GEMINI_API_KEY", "").strip()
+
+    # Disregard placeholder strings
+    if api_key in ["your_gemini_api_key_here", "your_api_key_here", ""]:
+        return ""
+
+    return api_key
+
+
 # ==============================================================================
 # Pipeline Cache & Session State
 # ==============================================================================
 @st.cache_resource(show_spinner=False)
 def get_base_pipeline():
     """Initializes the persistent RAG pipeline singleton."""
-    api_key = os.getenv("GEMINI_API_KEY", "")
     pipeline = RAGPipeline(
         index_dir="vectorstore",
         embedding_model_name="all-MiniLM-L6-v2",
         chunk_size=500,
         chunk_overlap=60,
-        gemini_api_key=api_key if api_key != "your_gemini_api_key_here" else None,
+        gemini_api_key=None,
         similarity_threshold=0.35,
     )
     # Attempt to load pre-indexed vectorstore if exists
@@ -185,6 +211,11 @@ def get_base_pipeline():
 
 
 pipeline = get_base_pipeline()
+
+# Automatically configure the Gemini API key from secrets or .env
+active_api_key = get_gemini_api_key()
+if active_api_key:
+    pipeline.set_gemini_key(active_api_key)
 
 # Session State Initialization
 if "messages" not in st.session_state:
@@ -203,24 +234,17 @@ with st.sidebar:
     st.title("Enterprise Control Panel")
     st.markdown("---")
 
-    # 1. LLM API Key Configuration
-    st.subheader("🔑 Google Gemini LLM")
-    current_key = os.getenv("GEMINI_API_KEY", "")
-    if current_key == "your_gemini_api_key_here":
-        current_key = ""
-
-    user_api_key = st.text_input(
-        "Enter Gemini API Key:",
-        value=current_key,
-        type="password",
-        help="Get your key at: https://aistudio.google.com/app/apikey"
-    )
-
-    if user_api_key:
-        pipeline.set_gemini_key(user_api_key)
-        st.success("API Key Active", icon="✅")
+    # 1. AI Service Connection Status
+    st.subheader("🤖 AI Service")
+    if active_api_key:
+        st.success("✅ AI Service Connected")
+        st.caption(f"Provider: Google Gemini (`{pipeline.llm.model_name}`)")
     else:
-        st.warning("API Key not set. Pipeline will run in local retrieval mode with context summarization.", icon="⚠️")
+        st.error("⚠️ AI Service Not Configured", icon="🚨")
+        st.caption(
+            "Please configure `GEMINI_API_KEY` in your local `.env` file or "
+            "in Streamlit Community Cloud (App Settings → Secrets)."
+        )
 
     st.markdown("---")
 
